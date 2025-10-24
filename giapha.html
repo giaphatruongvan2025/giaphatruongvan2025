@@ -1,31 +1,89 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-<meta charset="UTF-8">
-<title>Gia Phả Họ Trương</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Gia Phả Họ Trương Văn</title>
+
 <link rel="stylesheet" href="style/style.css">
-<script src="https://apis.google.com/js/api.js"></script>
-<script src="js/scripts.js" defer></script>
+<!-- No external libs required; everything runs client-side -->
 </head>
-
 <body>
-<div id="loginBox">
-<h2>Đăng Nhập Quản Trị</h2>
-<input type="password" id="pass" placeholder="Nhập mật khẩu">
-<button onclick="checkPass()">Đăng nhập</button>
-</div>
+  <header class="banner">
+    <h1>GIA PHẢ HỌ TRƯƠNG VĂN</h1>
+    <div class="controls">
+      <button id="btnAdd" class="btn" disabled>Thêm thành viên</button>
+      <button id="btnUpload" class="btn" disabled>Tải ảnh / video lên</button>
+      <button id="btnImport" class="btn small" disabled>📥 Nhập Excel (admin)</button>
+    </div>
+  </header>
 
-<header>
-<h1>Gia Phả Họ Trương</h1>
-<button id="btnAddPerson" disabled>Thêm thành viên</button>
-<button id="btnUpload" disabled>Tải ảnh / video lên</button>
-</header>
+  <main>
+    <section class="notice">
+      <p id="statusText">Hiển thị cây gia phả tại đây...</p>
+    </section>
 
-<section id="content">
-<div id="treeArea">
-<p>Hiển thị cây gia phả tại đây…</p>
-</div>
-</section>
+    <section id="treeWrap" class="tree-wrap">
+      <!-- Tree will be rendered here -->
+    </section>
 
+    <!-- Admin login modal -->
+    <div id="loginModal" class="modal hidden">
+      <div class="modal-card">
+        <h3>Đăng nhập quản trị</h3>
+        <input id="adminPass" type="password" placeholder="Nhập mật khẩu admin">
+        <div class="row">
+          <button id="btnLogin" class="btn">Đăng nhập</button>
+          <button id="btnCancelLogin" class="btn alt">Hủy</button>
+        </div>
+        <p class="small muted">Mật khẩu mặc định: <strong>123456</strong></p>
+      </div>
+    </div>
+
+    <!-- Add / Edit member modal -->
+    <div id="memberModal" class="modal hidden">
+      <div class="modal-card large">
+        <h3>Thêm / Sửa thành viên</h3>
+        <label>Họ tên <input id="m_name" /></label>
+        <label>Thường gọi <input id="m_nick" /></label>
+        <label>Năm sinh <input id="m_birth" /></label>
+        <label>Năm mất <input id="m_death" /></label>
+        <label>Giới tính <select id="m_gender"><option value="">--</option><option value="M">Nam</option><option value="F">Nữ</option></select></label>
+        <label>Cha (chọn nếu có): <select id="m_parent"><option value="">(Tổ / không chọn)</option></select></label>
+        <label>Vợ/Chồng (tên) <input id="m_spouse"/></label>
+        <label>Ảnh đại diện (chọn từ Media): <select id="m_media"><option value="">(không)</option></select></label>
+
+        <div class="row">
+          <button id="btnSaveMember" class="btn">Lưu</button>
+          <button id="btnCancelMember" class="btn alt">Hủy</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Upload media modal -->
+    <div id="mediaModal" class="modal hidden">
+      <div class="modal-card">
+        <h3>Upload ảnh / video (lưu local)</h3>
+        <input id="fileInput" type="file" accept="image/*,video/mp4" />
+        <p class="small muted">Lưu ý: tệp lớn có thể chậm và ngốn dung lượng localStorage.</p>
+        <div id="mediaPreview" class="media-preview"></div>
+        <div class="row">
+          <button id="btnCloseMedia" class="btn alt">Đóng</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- small debug / info area -->
+    <footer class="footer">
+      <div class="left">
+        <span id="userMode">Chế độ: Khách xem</span>
+      </div>
+      <div class="right">
+        <button id="btnLoginToggle" class="btn small">Đăng nhập Admin</button>
+      </div>
+    </footer>
+  </main>
+
+<script src="js/scripts.js"></script>
 </body>
 </html>
