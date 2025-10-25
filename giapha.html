@@ -958,104 +958,186 @@ function loadNews(){
   else { q('newsArea').innerHTML = `<div>Đã tải file: ${escapeHTML(f.name)}</div>`; showMsg('Đã tải tin tức (file không phải ảnh/video)'); }
 }
 function clearNews(){ q('newsArea').innerHTML = '<div class="notice">Chưa có dữ liệu</div>'; showMsg('Đã xóa tin tức'); }
+/* ====== GOOGLE DRIVE BACKUP (FULL) ====== */
 
-/* ====== GOOGLE DRIVE (LIGHTWEIGHT) ====== */
-/*
-  Note: To enable Drive upload you need to create credentials in Google Cloud Console,
-  enable Drive API, and supply CLIENT_ID below. This code uses OAuth2 implicit flow.
-  Replace CLIENT_ID with your OAuth client id (web application).
-*/
-const DRIVE_CLIENT_ID = ''; // <-- paste your client id here if you want Drive integration
-const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
-let gapiLoaded = false;
-function loadGapi(){
-  if(gapiLoaded) return Promise.resolve();
+const CLIENT_ID = "617270518639-n8fs220g6qm8acaqjsb1kbt5t61p8jou.apps.googleusercontent.com";
+const API_KEY = ""; // không cần
+const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
+const SCOPES = "https://www.googleapis.com/auth/drive.file";
+const DRIVE_FOLDER_NAME = "Gia Pha Truong Van 2025";
+
+let driveInitialized = false;
+let folderId = null;
+
+function loadGapiDrive() {
   return new Promise((resolve)=>{
-    const s = document.createElement('script'); s.src = 'https://apis.google.com/js/api.js'; s.onload = ()=>{
-      gapiLoaded = true; resolve();
-    };
+    const s = document.createElement("script");
+    s.src = "https://apis.google.com/js/api.js";
+    s.onload = resolve;
     document.head.appendChild(s);
   });
 }
-async function authAndInit(){
-  if(!DRIVE_CLIENT_ID) return alert('Chưa cấu hình CLIENT_ID cho Google Drive. Vui lòng thêm CLIENT_ID vào mã.');
-  await loadGapi();
-  return new Promise((resolve,reject)=>{
+
+async function initDrive() {
+  if(driveInitialized) return;
+
+  await loadGapiDrive();
+  return new Promise((resolve, reject)=>{
     gapi.load('client:auth2', async ()=>{
-      try{
-        await gapi.client.init({clientId: DRIVE_CLIENT_ID, scope: DRIVE_SCOPE});
+      try {
+        await gapi.client.init({
+          apiKey: API_KEY,
+          clientId: CLIENT_ID,
+          discoveryDocs: DISCOVERY_DOCS,
+          scope: SCOPES
+        });
+
+        driveInitialized = true;
         resolve();
-      }catch(e){ reject(e); }
+      } catch(e) {
+        reject(e);
+      }
     });
   });
 }
-async function uploadBackupToDrive(){
-  if(!DRIVE_CLIENT_ID) return alert('Chưa cấu hình CLIENT_ID cho Google Drive.');
-  try{
-    await authAndInit();
-    const isSignedIn = gapi.auth2.getAuthInstance().isSignedIn.get();
-    if(!isSignedIn){
-      await gapi.auth2.getAuthInstance().signIn();
-    }
-    const metadata = {
-      name: 'giaPha_backup_' + new Date().toISOString().replace(/[:.]/g,'_') + '.json',
-      mimeType: 'application/json'
-    };
-    const blob = new Blob([JSON.stringify(giaPha, null, 2)], {type:'application/json'});
-    const accessToken = gapi.auth.getToken().access_token;
-    const form = new FormData();
-    form.append('metadata', new Blob([JSON.stringify(metadata)], {type: 'application/json'}));
-    form.append('file', blob);
-    const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + accessToken },
-      body: form
-    });
-    const d = await res.json();
-    if(d.id) showMsg('Sao lưu lên Drive thành công');
-    else showMsg('Không tải được lên Drive');
-  }catch(err){ console.error(err); alert('Lỗi Drive: '+err.message); }
-}
-async function restoreBackupFromDrive(){
-  if(!DRIVE_CLIENT_ID) return alert('Chưa cấu hình CLIENT_ID cho Google Drive.');
-  try{
-    await authAndInit();
-    const isSignedIn = gapi.auth2.getAuthInstance().isSignedIn.get();
-    if(!isSignedIn){
-      await gapi.auth2.getAuthInstance().signIn();
-    }
-    // Open Drive picker in simple way: list files (limited)
-    const accessToken = gapi.auth.getToken().access_token;
-    const res = await fetch('https://www.googleapis.com/drive/v3/files?q=name contains \'giaPha_backup_\' and mimeType=\'application/json\'&pageSize=10&fields=files(id,name,modifiedTime)', {
-      headers: { 'Authorization': 'Bearer ' + accessToken }
-    });
-    const j = await res.json();
-    if(!j.files || j.files.length===0){ alert('Không tìm thấy bản sao lưu trên Drive'); return; }
-    // pick the latest
-    j.files.sort((a,b)=> new Date(b.modifiedTime) - new Date(a.modifiedTime));
-    const fid = j.files[0].id;
-    const fileRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fid}?alt=media`, { headers:{ 'Authorization':'Bearer '+accessToken } });
-    const txt = await fileRes.text();
-    try{
-      const parsed = JSON.parse(txt);
-      if(!Array.isArray(parsed)) throw new Error('Định dạng không hợp lệ');
-      giaPha = parsed; nextID = giaPha.length ? Math.max(...giaPha.map(p=>p.ID))+1 : 1;
-      save(); renderTree(); updateChaSelect(); q('mainForm').reset(); q('VoFormContainer').innerHTML=''; currentID=null;
-      capNhatDanhSachDoi(); capNhatDanhSachTen(); showMsg('Đã phục hồi dữ liệu từ Drive');
-    }catch(err){ alert('File không hợp lệ: '+err.message); }
-  }catch(err){ console.error(err); alert('Lỗi Drive: '+err.message); }
+
+async function signInDrive(){
+  const auth = gapi.auth2.getAuthInstance();
+  if(!auth.isSignedIn.get()){
+    await auth.signIn();
+  }
 }
 
-/* Add Drive buttons to UI */
+async function getDriveFolder(){
+  if(folderId) return folderId;
+  await initDrive();
+  await signInDrive();
+  const token = gapi.auth.getToken().access_token;
+
+  // tìm thư mục
+  let res = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=name='${encodeURIComponent(DRIVE_FOLDER_NAME)}'+and+mimeType='application/vnd.google-apps.folder'&fields=files(id)`,
+    { headers:{ Authorization: "Bearer "+token } }
+  );
+  let j = await res.json();
+  if(j.files && j.files.length > 0){
+    folderId = j.files[0].id;
+    return folderId;
+  }
+
+  // tạo mới nếu chưa có
+  res = await fetch(
+    "https://www.googleapis.com/drive/v3/files?fields=id",
+    {
+      method:"POST",
+      headers:{
+        Authorization:"Bearer "+token,
+        "Content-Type":"application/json"
+      },
+      body:JSON.stringify({
+        name: DRIVE_FOLDER_NAME,
+        mimeType:"application/vnd.google-apps.folder"
+      })
+    }
+  );
+  j = await res.json();
+  folderId = j.id;
+  return folderId;
+}
+
+async function uploadBackupToDrive(){
+  try{
+    await initDrive();
+    await signInDrive();
+
+    const folder = await getDriveFolder();
+    const token = gapi.auth.getToken().access_token;
+
+    const blob = new Blob([JSON.stringify(giaPha, null, 2)], {type:'application/json'});
+    const metadata = {
+      name: 'giaPha_backup_'+new Date().toISOString().replace(/[:.]/g,'_')+'.json',
+      parents:[folder]
+    };
+
+    const form = new FormData();
+    form.append("metadata", new Blob([JSON.stringify(metadata)],{type:"application/json"}));
+    form.append("file", blob);
+
+    await fetch(
+      "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",
+      { method:"POST", headers:{ Authorization:"Bearer "+token }, body:form }
+    );
+
+    showMsg("✅ Đã sao lưu lên Google Drive!");
+  }catch(e){
+    alert("Drive Error: "+e.message);
+  }
+}
+
+async function restoreBackupFromDrive(){
+  try{
+    await initDrive();
+    await signInDrive();
+
+    const folder = await getDriveFolder();
+    const token = gapi.auth.getToken().access_token;
+
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q='${folder}'+in+parents&fields=files(id,name,modifiedTime)&pageSize=20`,
+      { headers:{ Authorization:"Bearer "+token } }
+    );
+    const j = await res.json();
+    if(!j.files || j.files.length == 0) return alert("Chưa có bản sao lưu trên Drive!");
+
+    j.files.sort((a,b)=> new Date(b.modifiedTime)-new Date(a.modifiedTime));
+    const fid = j.files[0].id;
+
+    const file = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${fid}?alt=media`,
+      { headers:{ Authorization:"Bearer "+token } }
+    );
+    const txt = await file.text();
+    const parsed = JSON.parse(txt);
+
+    if(!Array.isArray(parsed)) throw new Error("Dữ liệu lỗi!");
+
+    giaPha = parsed;
+    nextID = giaPha.length ? Math.max(...giaPha.map(p=>p.ID)) + 1 : 1;
+    save(); renderTree(); updateChaSelect();
+    showMsg("✅ Đã khôi phục từ Drive!");
+  }catch(e){
+    alert("Drive Error: "+e.message);
+  }
+}
+
 function addDriveButtons(){
-  if(q('driveBackupBtn')) return;
-  const cont = document.createElement('div');
-  cont.style.position='fixed'; cont.style.top='14px'; cont.style.right='14px'; cont.style.zIndex=1300; cont.style.display='flex'; cont.style.gap='8px';
-  const b1 = document.createElement('button'); b1.id='driveBackupBtn'; b1.className='btn'; b1.textContent='📤 Sao lưu lên Drive'; b1.onclick = uploadBackupToDrive;
-  const b2 = document.createElement('button'); b2.id='driveRestoreBtn'; b2.className='btn secondary'; b2.textContent='📥 Khôi phục từ Drive'; b2.onclick = restoreBackupFromDrive;
-  cont.appendChild(b1); cont.appendChild(b2);
+  if(document.querySelector('#driveBackupBtn')) return;
+  const cont = document.createElement("div");
+  cont.style.position="fixed";
+  cont.style.top="14px";
+  cont.style.right="14px";
+  cont.style.zIndex=2000;
+  cont.style.display="flex";
+  cont.style.gap="6px";
+
+  const b1 = document.createElement("button");
+  b1.className="btn";
+  b1.id="driveBackupBtn";
+  b1.textContent="📤 Drive Backup";
+  b1.onclick = uploadBackupToDrive;
+
+  const b2 = document.createElement("button");
+  b2.className="btn secondary";
+  b2.id="driveRestoreBtn";
+  b2.textContent="📥 Restore";
+  b2.onclick = restoreBackupFromDrive;
+
+  cont.appendChild(b1);
+  cont.appendChild(b2);
+
   document.body.appendChild(cont);
 }
+
 
 /* ====== INIT (BLOCK: startup) ====== */
 window.addEventListener('load', ()=>{
@@ -1067,7 +1149,7 @@ window.addEventListener('load', ()=>{
   // password prompt
   setTimeout(askPasswordOnLoad, 60);
   // add drive buttons (only visible if DRIVE_CLIENT_ID set)
-  if(DRIVE_CLIENT_ID) addDriveButtons();
+  addDriveButtons();
 });
 </script>
 
