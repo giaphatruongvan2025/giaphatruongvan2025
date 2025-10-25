@@ -137,7 +137,106 @@ label{display:block}
 .tree-area::-webkit-scrollbar, #newsContainer::-webkit-scrollbar{width:8px}
 .tree-area::-webkit-scrollbar-thumb, #newsContainer::-webkit-scrollbar-thumb{background:#e0bfbf;border-radius:6px}
 </style>
+<!-- Google Identity Services -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+
+<script>
+const CLIENT_ID = "617270518639-n8fs220g6qm8acaqjsb1kbt5t61p8jou.apps.googleusercontent.com";
+let accessToken = null;
+let folderId = null;
+const FOLDER_NAME = "GiaPha_TruongVan2025";
+
+async function initGoogleAuth(){
+  google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: "https://www.googleapis.com/auth/drive.file",
+    callback: (res)=>{
+      accessToken = res.access_token;
+      document.getElementById("driveLoginBtn").style.display = "none";
+      document.getElementById("driveButtons").style.display = "flex";
+      showMsg("✅ Đăng nhập Google thành công!");
+    }
+  }).requestAccessToken();
+}
+
+async function ensureFolder(){
+  if(folderId) return folderId;
+  const q = `name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder'`;
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}`,{
+    headers:{Authorization:`Bearer ${accessToken}`}
+  });
+  const j = await r.json();
+  if(j.files && j.files.length>0){
+    folderId = j.files[0].id;
+    return folderId;
+  }
+  const create = await fetch("https://www.googleapis.com/drive/v3/files",{
+    method:"POST",
+    headers:{
+      Authorization:`Bearer ${accessToken}`,
+      "Content-Type":"application/json"
+    },
+    body: JSON.stringify({
+      name:FOLDER_NAME,
+      mimeType:"application/vnd.google-apps.folder"
+    })
+  });
+  const cd = await create.json();
+  folderId = cd.id;
+  return folderId;
+}
+
+async function uploadToDrive(){
+  if(!accessToken) return alert("Vui lòng đăng nhập Google trước!");
+  await ensureFolder();
+  const metadata = {
+    name:"giaPha_data.json",
+    parents:[folderId]
+  };
+  const blob = new Blob([JSON.stringify(giaPha,null,2)],{type:"application/json"});
+  const ff = new FormData();
+  ff.append("metadata", new Blob([JSON.stringify(metadata)],{type:"application/json"}));
+  ff.append("file", blob);
+  const r = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",{
+    method:"POST",
+    headers:{Authorization:`Bearer ${accessToken}`},
+    body: ff
+  });
+  const j = await r.json();
+  if(j.id) showMsg("📤 Sao lưu lên Drive thành công!");
+  else showMsg("❌ Lỗi upload");
+}
+
+async function restoreFromDrive(){
+  if(!accessToken) return alert("Đăng nhập trước đi anh!");
+  await ensureFolder();
+  const q = `'${folderId}' in parents and name='giaPha_data.json'`;
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`,{
+    headers:{Authorization:`Bearer ${accessToken}`}
+  });
+  const j = await r.json();
+  if(!j.files || !j.files.length) return alert("Không có bản sao lưu nào!");
+  const fid = j.files[0].id;
+  const fr = await fetch(`https://www.googleapis.com/drive/v3/files/${fid}?alt=media`,{
+    headers:{Authorization:`Bearer ${accessToken}`}
+  });
+  const txt = await fr.text();
+  try{
+    const parsed = JSON.parse(txt);
+    giaPha = parsed;
+    nextID = giaPha.length ? Math.max(...giaPha.map(p=>p.ID))+1 : 1;
+    save();
+    renderTree(); updateChaSelect();
+    showMsg("📥 Khôi phục dữ liệu thành công!");
+  }catch(e){
+    alert("File lỗi không đọc được!");
+  }
+}
+</script>
+
+
 </head>
+
 <body>
 
 <!-- ====== HEADER (BLOCK: header) ====== -->
@@ -147,7 +246,17 @@ label{display:block}
   <div class="header-sub">MẠNH CHI</div>
   <div style="font-size:13px;color:#fff;margin-top:6px">Written by Trương Văn Thành — giaphatruongvan2025@gmail.com — 0982175887</div>
 </div>
+<!-- THÊM NHÓM NÚT DRIVE Ở ĐÂY -->
+<div style="display:flex; gap:6px; margin:10px; justify-content:center;">
+  <button id="driveLoginBtn" class="btn" onclick="initGoogleAuth()">🔵 Đăng nhập Google Drive</button>
 
+  <div id="driveButtons" style="display:none; gap:6px;">
+    <button class="btn" onclick="uploadToDrive()">📤 Lưu lên Drive</button>
+    <button class="btn secondary" onclick="restoreFromDrive()">📥 Khôi phục dữ liệu</button>
+  </div>
+</div>
+
+ 
 <!-- ====== STATUS TOAST (BLOCK: status) ====== -->
 <div id="statusArea" style="display:none"></div>
 
